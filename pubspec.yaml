@@ -1,0 +1,27 @@
+name: securepassword
+description: "A new Flutter project."
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.9.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  password_strength: ^0.2.0
+  flutter_secure_storage: ^9.0.0
+  font_awesome_flutter: ^10.7.0
+  uuid: ^4.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  password_strength: ^0.2.0 # <--- AGGIUNGI QUI
+  flutter_secure_storage: ^9.0.0 # Assicurati di usare la versione più recente
+  font_awesome_flutter: ^10.7.0 # Assicurati di usare la versione più recente
+  uuid: ^4.0.0 # <--- AGGIUNGI QUESTA LINEA
+
+flutter:
+  uses-material-design: true
