@@ -2,7 +2,39 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/password_entry.dart';
 import '../services/secure_storage_service.dart';
-import '../pages/add_password_form.dart';
+import '../pages/add_password_screen.dart'; // Correzione dell'importazione
+
+// Widget riutilizzabile per visualizzare un campo informativo (Username/Email)
+class _DetailRow extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _DetailRow({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 8.0),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: theme.colorScheme.onSurface.withOpacity(0.6)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: theme.textTheme.bodyMedium!.copyWith(
+                color: theme.colorScheme.onSurface,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 
 class PasswordCard extends StatefulWidget {
   final PasswordEntry entry;
@@ -26,22 +58,26 @@ class _PasswordCardState extends State<PasswordCard> {
   // Funzione per copiare il testo negli appunti
   void _copyToClipboard(String text, BuildContext context) {
     Clipboard.setData(ClipboardData(text: text));
+    // Mostra una Snackbar più discreta
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Password copiata negli appunti! 📋'),
-        duration: Duration(milliseconds: 1500),
+      SnackBar(
+        content: Text('Copiato: $text! 📋'),
+        duration: const Duration(milliseconds: 1500),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
 
-  // Funzione per aprire il form di modifica
+  // NUOVO: Naviga alla pagina di modifica
   void _editPassword() {
-    // Chiama la funzione top-level per aprire il dialogo di modifica,
-    // pre-compilando con i dati dell'entry.
-    showAddPasswordDialog(
-      context, 
-      widget.onEdit, // Callback per ricaricare la Dashboard dopo la modifica
-      existingEntry: widget.entry,
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => AddPasswordScreen(
+          existingEntry: widget.entry,
+          onPasswordUpdated: widget.onEdit, // Chiama onEdit per ricaricare la Dashboard
+        ),
+      ),
     );
   }
   
@@ -71,41 +107,73 @@ class _PasswordCardState extends State<PasswordCard> {
     if (confirmed == true) {
       final storageService = SecureStorageService();
       await storageService.deletePassword(widget.entry.id);
-      widget.onDelete(); // Esegue il callback per aggiornare la Dashboard
-     
+      widget.onDelete(); // Aggiorna la Dashboard
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Password per ${widget.entry.title} eliminata.')),
+        );
+      }
     }
   }
 
-  // Costruisce la riga con username o email se uno dei due è vuoto
+  // Costruisce la sezione informativa (Username/Email) in colonna
   Widget _buildAccountInfo(ThemeData theme) {
-    // Usa un Column per mettere i dati in verticale (come richiesto)
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Username
         if (widget.entry.username.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4.0),
-            child: Text(
-              widget.entry.username,
-              style: theme.textTheme.titleMedium!.copyWith(
-                color: theme.colorScheme.onSurface,
-                fontWeight: FontWeight.bold,
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
+          _DetailRow(
+            icon: Icons.person_rounded,
+            text: widget.entry.username,
           ),
         
-        // Email (solo se non è vuota)
         if (widget.entry.email.isNotEmpty)
-          Text(
-            widget.entry.email,
-            style: theme.textTheme.bodyMedium!.copyWith(
-              color: theme.colorScheme.onSurface.withOpacity(0.7),
-            ),
-            overflow: TextOverflow.ellipsis,
+          _DetailRow(
+            icon: Icons.mail_rounded,
+            text: widget.entry.email,
           ),
       ],
+    );
+  }
+
+  // Costruisce l'indicatore di forza con la percentuale
+  Widget _buildStrengthIndicator(ThemeData theme, double strengthValue, Color strengthColor, PasswordStrengthLevel strengthLevel) {
+    if (strengthLevel == PasswordStrengthLevel.blank) {
+      return const SizedBox.shrink(); // Non mostrare nulla se la password è vuota
+    }
+
+    // Calcola la percentuale intera
+    final percentage = (strengthValue * 100).round();
+    
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 15),
+      child: Row(
+        children: [
+          // Testo Percentuale
+          SizedBox(
+            width: 50,
+            child: Text(
+              '$percentage%',
+              style: TextStyle(
+                color: strengthColor,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+
+          // Indicatore di Progresso
+          Expanded(
+            child: LinearProgressIndicator(
+              value: strengthValue,
+              backgroundColor: strengthColor.withOpacity(0.2), 
+              valueColor: AlwaysStoppedAnimation<Color>(strengthColor),
+              minHeight: 5.0,
+              borderRadius: BorderRadius.circular(5),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -113,134 +181,135 @@ class _PasswordCardState extends State<PasswordCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     
-    // Ora accediamo ai getter e ai metodi definiti in PasswordEntry
+    // Logica per l'indicatore di forza (definito in PasswordEntry)
     final strengthLevel = widget.entry.strengthLevel;
     final strengthColor = widget.entry.strengthColor(theme);
     final strengthValue = widget.entry.strengthValue;
     
-    return Card(
+    return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(15),
+      decoration: BoxDecoration(
+        color: theme.cardColor, // Colore di sfondo della Card
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          // Ombra per un look più moderno e leggero
+          BoxShadow(
+            color: theme.colorScheme.shadow.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+        ],
       ),
-      elevation: 5,
-      child: Stack(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                // TITOLO E ICONA
-                Row(
-                  children: [
-                    Icon(Icons.vpn_key_rounded, color: theme.colorScheme.primary),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        widget.entry.title,
-                        style: theme.textTheme.headlineSmall!.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.primary,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 15),
-
-                // USERNAME E EMAIL (IN COLONNA)
-                _buildAccountInfo(theme), 
-                
-                const SizedBox(height: 15),
-                
-                // SEZIONE PASSWORD
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: GestureDetector(
-                        onLongPress: () => _copyToClipboard(widget.entry.password, context),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  // TITOLO E AZIONI PRINCIPALI
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Titolo
+                      Expanded(
                         child: Text(
-                          _isPasswordVisible
-                              ? widget.entry.password
-                              : '••••••••••••••••',
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontFamily: 'monospace', // Usa un font monospace per le password
+                          widget.entry.title,
+                          style: theme.textTheme.titleLarge!.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.onSurface,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                    ),
-                    
-                    // Pulsante Visibility
-                    IconButton(
-                      icon: Icon(
-                        _isPasswordVisible ? Icons.visibility_off : Icons.visibility,
-                        color: theme.colorScheme.secondary,
+
+                      // Azioni Modifica / Elimina
+                      Row(
+                        children: [
+                          // Pulsante Modifica (ORA USA NAVIGAZIONE)
+                          IconButton(
+                            icon: Icon(Icons.edit_rounded, color: theme.colorScheme.primary, size: 20),
+                            onPressed: _editPassword,
+                            tooltip: 'Modifica',
+                          ),
+                          
+                          // Pulsante Elimina
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 20),
+                            onPressed: _deletePassword,
+                            tooltip: 'Elimina',
+                          ),
+                        ],
                       ),
-                      onPressed: () {
-                        setState(() {
-                          _isPasswordVisible = !_isPasswordVisible;
-                        });
-                      },
-                      tooltip: _isPasswordVisible ? 'Nascondi Password' : 'Mostra Password',
-                    ),
-                    
-                    // Pulsante Copia Password
-                    IconButton(
-                      icon: Icon(Icons.copy, color: theme.colorScheme.secondary.withOpacity(0.7)),
-                      onPressed: () => _copyToClipboard(widget.entry.password, context),
-                      tooltip: 'Copia Password',
-                    ),
-                  ],
-                ),
-                
-                const SizedBox(height: 15),
-                
-                // SEZIONE AZIONI (MODIFICA / ELIMINA)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    // Pulsante Modifica
-                    IconButton(
-                      icon: Icon(Icons.edit_rounded, color: theme.colorScheme.primary),
-                      onPressed: _editPassword,
-                      tooltip: 'Modifica',
-                    ),
-                    
-                    // Pulsante Elimina
-                    IconButton(
-                      icon: const Icon(Icons.delete_forever_rounded, color: Colors.redAccent),
-                      onPressed: _deletePassword,
-                      tooltip: 'Elimina',
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                  const Divider(height: 20),
+
+                  // USERNAME E EMAIL (IN COLONNA)
+                  _buildAccountInfo(theme), 
+                  
+                  const SizedBox(height: 15),
+                ],
+              ),
             ),
-          ),
-          
-          // INDICATORE FORZA PASSWORD NEL BORDO INFERIORE
-          if (strengthLevel != PasswordStrengthLevel.blank)
+            
+            // INDICATORE FORZA PASSWORD
+            _buildStrengthIndicator(theme, strengthValue, strengthColor, strengthLevel),
+
+            // SEZIONE PASSWORD (Sfondo e layout compatto)
             Container(
-              height: 4.0, 
-              decoration: BoxDecoration(
-                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(15)), 
-                color: strengthColor.withOpacity(0.3),
-              ),
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(15)),
-                child: LinearProgressIndicator(
-                  value: strengthValue,
-                  backgroundColor: Colors.transparent, 
-                  valueColor: AlwaysStoppedAnimation<Color>(strengthColor),
-                ),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+              // Sfondo leggermente colorato per la sezione password
+              color: theme.colorScheme.surface.withOpacity(0.5), 
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // PASSWORD NASCOSTA O VISIBILE
+                  Expanded(
+                    child: GestureDetector(
+                      onLongPress: () => _copyToClipboard(widget.entry.password, context),
+                      child: Text(
+                        _isPasswordVisible
+                            ? widget.entry.password
+                            : '••••••••••••••••',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontFamily: 'monospace',
+                          color: theme.colorScheme.onSurface,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                  
+                  // Pulsante Visibility
+                  IconButton(
+                    icon: Icon(
+                      _isPasswordVisible ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                      color: theme.colorScheme.secondary,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _isPasswordVisible = !_isPasswordVisible;
+                      });
+                    },
+                    tooltip: _isPasswordVisible ? 'Nascondi Password' : 'Mostra Password',
+                  ),
+                  
+                  // Pulsante Copia Password
+                  IconButton(
+                    icon: Icon(Icons.copy_rounded, color: theme.colorScheme.secondary.withOpacity(0.7)),
+                    onPressed: () => _copyToClipboard(widget.entry.password, context),
+                    tooltip: 'Copia Password',
+                  ),
+                ],
               ),
             ),
-        ],
+          ],
+        ),
       ),
     );
   }

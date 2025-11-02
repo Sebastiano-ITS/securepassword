@@ -22,6 +22,12 @@ dev_dependencies:
   flutter_secure_storage: ^9.0.0 # Assicurati di usare la versione più recente
   font_awesome_flutter: ^10.7.0 # Assicurati di usare la versione più recente
   uuid: ^4.0.0 # <--- AGGIUNGI QUESTA LINEA
+  flutter_launcher_icons: "^0.13.1"
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/icon/app_icon.png"
 
 flutter:
   uses-material-design: true

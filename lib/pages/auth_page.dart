@@ -11,18 +11,13 @@ class AuthPage extends StatefulWidget {
 
 class _AuthPageState extends State<AuthPage> {
   final SecureStorageService _storageService = SecureStorageService();
-  
-  // Controller esistenti
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   
-  // NUOVI Controller per Registrazione
-  final TextEditingController _emailController = TextEditingController(); // <--- NUOVO
-  final TextEditingController _confirmPasswordController = TextEditingController(); // <--- NUOVO
-  
-  bool _isLoginMode = true; // true: Login, false: Signup
+  bool _isLoginMode = true; // true: Login, false: Registrazione
   bool _isLoading = true;
   String? _errorMessage;
+  bool _isPasswordVisible = false; // Stato per la visibilità della password
 
   @override
   void initState() {
@@ -30,28 +25,37 @@ class _AuthPageState extends State<AuthPage> {
     _checkInitialState();
   }
 
-  // Controlla se un account Master è già stato creato E se c'è una sessione attiva
+  // Controlla se un account Master è già stato creato e se la sessione è attiva
   Future<void> _checkInitialState() async {
+    // 1. Controlla se esiste l'account (determina la modalità Login/Registrazione)
     final accountExists = await _storageService.isAccountCreated();
-    final sessionActive = await _storageService.checkSession(); // <--- CONTROLLO SESSIONE
     
-    if (sessionActive) {
+    // 2. Controlla se l'utente è già loggato
+    // Correzione: uso isLoggedIn() invece di checkSession()
+    final sessionActive = await _storageService.isLoggedIn();
+
+    if (sessionActive && mounted) {
       // Se la sessione è attiva, naviga direttamente alla HomePage
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const HomePage()),
-        );
-      }
-      return;
+      _navigateToHome();
+      return; 
     }
-    
+
     setState(() {
       _isLoginMode = accountExists; // Se esiste, la modalità predefinita è Login
       _isLoading = false;
     });
   }
+  
+  void _navigateToHome() {
+     Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const HomePage()),
+        (Route<dynamic> route) => false,
+      );
+  }
 
   void _handleAuth() async {
+    if (!mounted) return;
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -60,52 +64,49 @@ class _AuthPageState extends State<AuthPage> {
     final username = _usernameController.text.trim();
     final password = _passwordController.text;
 
-    if (username.isEmpty || password.isEmpty) {
+    if (username.isEmpty || password.isEmpty || password.length < 6) {
       setState(() {
-        _errorMessage = 'Nome utente e password non possono essere vuoti.';
+        _errorMessage = 'Username e password (min. 6 caratteri) sono obbligatori.';
         _isLoading = false;
       });
       return;
     }
-
+    
     bool success = false;
+    String successMessage = '';
 
-    if (_isLoginMode) {
-      // LOGICA DI LOGIN
-      success = await _storageService.login(username, password);
-      if (!success) {
-        _errorMessage = 'Credenziali non valide.';
-      }
-    } else {
-      // LOGICA DI REGISTRAZIONE (SIGNUP)
-      final email = _emailController.text.trim();
-      final confirmPassword = _confirmPasswordController.text;
-      
-      if (email.isEmpty || password != confirmPassword) {
-        _errorMessage = email.isEmpty 
-            ? 'L\'email non può essere vuota.'
-            : 'Le password non corrispondono.';
+    try {
+      if (_isLoginMode) {
+        // Modalità Login: usa il metodo 'login'
+        success = await _storageService.login(username, password);
+        successMessage = 'Accesso effettuato con successo!';
       } else {
-        await _storageService.createMasterAccount(
-          username: username,
-          email: email,
-          password: password,
-        );
+        // Modalità Registrazione: usa il metodo 'registerMasterAccount'
+        // Correzione: uso registerMasterAccount() invece di createMasterAccount()
+        await _storageService.registerMasterAccount(username, password);
         success = true;
+        successMessage = 'Account Master creato con successo!';
       }
+    } catch (e) {
+      success = false;
+      _errorMessage = 'Errore di autenticazione: ${e.toString()}';
     }
 
-    if (mounted) {
+    if (!mounted) return;
+
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(successMessage)),
+      );
+      _navigateToHome();
+    } else {
       setState(() {
         _isLoading = false;
+        // Mostra un messaggio di errore più specifico per il login fallito
+        if (_isLoginMode && _errorMessage == null) {
+          _errorMessage = 'Credenziali non valide. Riprova.';
+        }
       });
-
-      if (success) {
-        // Naviga alla homepage e rimuove la pagina di autenticazione
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const HomePage()),
-        );
-      }
     }
   }
 
@@ -113,27 +114,22 @@ class _AuthPageState extends State<AuthPage> {
     setState(() {
       _isLoginMode = !_isLoginMode;
       _errorMessage = null;
-      // Pulisci i campi aggiuntivi quando si cambia modalità
-      _emailController.clear();
-      _confirmPasswordController.clear();
+      _usernameController.clear();
+      _passwordController.clear();
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    // Testi dinamici
-    final title = _isLoginMode ? 'Accedi al tuo Vault' : 'Registra Account Master';
     final buttonText = _isLoginMode ? 'ACCEDI' : 'REGISTRATI';
     final toggleText = _isLoginMode
-        ? 'Non hai un account? Registrati ora.'
-        : 'Hai già un account? Accedi.';
+        ? 'Non hai un account? Registrati ora'
+        : 'Hai già un account? Accedi';
+
+    final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        elevation: 0,
-      ),
+      backgroundColor: theme.colorScheme.background,
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(32.0),
@@ -141,80 +137,78 @@ class _AuthPageState extends State<AuthPage> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              // Immagine/Icona
+              // Logo/Titolo
               Icon(
-                Icons.security_rounded,
-                size: 80,
-                color: Theme.of(context).colorScheme.secondary,
+                Icons.lock_open_rounded, 
+                size: 100, 
+                color: theme.colorScheme.primary,
               ),
-              const SizedBox(height: 30),
-              
-              // Campo Username
+              const SizedBox(height: 20),
+              Text(
+                _isLoginMode ? 'Bentornato nel tuo Vault' : 'Crea il tuo Vault Master',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.headlineSmall!.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: theme.colorScheme.onBackground,
+                ),
+              ),
+              const SizedBox(height: 40),
+
+              // Campo Username/Identificativo
               TextField(
                 controller: _usernameController,
-                decoration: const InputDecoration(
-                  labelText: 'Nome Utente Master',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
-                  prefixIcon: Icon(Icons.person_outline),
+                decoration: InputDecoration(
+                  labelText: 'Username o Email Master',
+                  prefixIcon: const Icon(Icons.person),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  filled: true,
+                  fillColor: theme.colorScheme.surface,
                 ),
+                keyboardType: TextInputType.emailAddress,
+                style: theme.textTheme.bodyLarge,
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
 
-              // Campo Email (Solo in modalità Registrazione)
-              if (!_isLoginMode) ...[
-                TextField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(
-                    labelText: 'Email Master',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
-                    prefixIcon: Icon(Icons.email_outlined),
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
-              
               // Campo Password
               TextField(
                 controller: _passwordController,
-                obscureText: true,
-                decoration: const InputDecoration(
+                obscureText: !_isPasswordVisible,
+                decoration: InputDecoration(
                   labelText: 'Password Master',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
-                  prefixIcon: Icon(Icons.lock_outline),
-                ),
-              ),
-              const SizedBox(height: 16),
-              
-              // Campo Conferma Password (Solo in modalità Registrazione)
-              if (!_isLoginMode) ...[
-                TextField(
-                  controller: _confirmPasswordController,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Conferma Password Master',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
-                    prefixIcon: Icon(Icons.lock_reset_outlined),
+                  prefixIcon: const Icon(Icons.vpn_key),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _isPasswordVisible ? Icons.visibility_off : Icons.visibility,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _isPasswordVisible = !_isPasswordVisible;
+                      });
+                    },
                   ),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  filled: true,
+                  fillColor: theme.colorScheme.surface,
                 ),
-                const SizedBox(height: 16),
-              ],
+                style: theme.textTheme.bodyLarge,
+              ),
 
-              // Messaggio di Errore
               if (_errorMessage != null)
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 20),
+                  padding: const EdgeInsets.only(top: 15.0),
                   child: Text(
                     _errorMessage!,
-                    style: TextStyle(color: Theme.of(context).colorScheme.error, fontWeight: FontWeight.bold),
+                    style: TextStyle(color: theme.colorScheme.error, fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
                   ),
                 ),
               const SizedBox(height: 30),
-              
+
               // Pulsante principale Login/Registrati
               _isLoading
-                  ? const Center(child: CircularProgressIndicator())
+                  ? Center(
+                      child: CircularProgressIndicator(color: theme.colorScheme.secondary),
+                    )
                   : ElevatedButton(
                       onPressed: _handleAuth,
                       style: ElevatedButton.styleFrom(
@@ -222,24 +216,23 @@ class _AuthPageState extends State<AuthPage> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        backgroundColor:
-                            Theme.of(context).colorScheme.secondary,
-                        foregroundColor:
-                            Theme.of(context).colorScheme.onSecondary,
+                        backgroundColor: theme.colorScheme.secondary,
+                        foregroundColor: theme.colorScheme.onSecondary,
+                        elevation: 5,
                       ),
                       child: Text(
                         buttonText,
-                        style: const TextStyle(fontSize: 18),
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
                     ),
               const SizedBox(height: 20),
-              
+
               // Pulsante per cambiare modalità
               TextButton(
                 onPressed: _toggleMode,
                 child: Text(
                   toggleText,
-                  style: TextStyle(color: Theme.of(context).colorScheme.primary),
+                  style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.w600),
                 ),
               ),
             ],

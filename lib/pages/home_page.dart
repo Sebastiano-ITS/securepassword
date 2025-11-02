@@ -2,8 +2,9 @@
 
 import 'package:flutter/material.dart';
 import 'dashboard_page.dart';
-import 'add_password_form.dart';
+import 'add_password_screen.dart'; // Importa la nuova pagina
 import 'profile_page.dart';
+import '../models/password_entry.dart'; // Necessario per il passaggio del tipo
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -20,30 +21,41 @@ class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
 
   // Lista di widget per le tab
+  // NB: La tab 1 è un placeholder perché vogliamo un FAB
   late final List<Widget> _pages = [
-    DashboardPage(key: _dashboardKey), // 1) Dashboard
-    const AddPasswordPage(), // 2) Pulsante + (Placeholder)
-    const ProfilePage(), // 3) Profilo
+    DashboardPage(key: _dashboardKey), // 0) Dashboard
+    // Non c'è più una pagina dedicata al form qui.
+    const ProfilePage(), // 1) Profilo
   ];
 
+  // Modifichiamo l'indice per riflettere solo Dashboard (0) e Profilo (1)
   void _onItemTapped(int index) {
-    // Se l'utente clicca sulla tab 'Aggiungi', apriamo il form
-    if (index == 1) {
-      _showAddForm();
+    if (index == 2) { // Se clicca sul terzo elemento (che sarà il profilo)
+       setState(() {
+        _selectedIndex = 1; // 1 è l'indice di ProfilePage nella lista _pages
+      });
     } else {
-      // Altrimenti, cambiamo semplicemente la schermata
       setState(() {
         _selectedIndex = index;
       });
     }
   }
 
-  // Funzione che apre il dialogo per aggiungere la password
-  void _showAddForm() {
-    showAddPasswordDialog(context, () {
-      // Dopo l'aggiunta, ricarica la lista nella Dashboard chiamando il metodo pubblico
-      _dashboardKey.currentState?.loadPasswords();
-    });
+  // Funzione che naviga alla nuova schermata per l'aggiunta
+  void _navigateToAddForm({PasswordEntry? entry}) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => AddPasswordScreen(
+          existingEntry: entry,
+          // Quando il form salva, ricarica le password sulla Dashboard
+          onPasswordUpdated: () {
+            _dashboardKey.currentState?.loadPasswords();
+            // Torna alla Dashboard dopo il salvataggio
+            setState(() { _selectedIndex = 0; }); 
+          },
+        ),
+      ),
+    );
   }
 
   @override
@@ -57,27 +69,37 @@ class _HomePageState extends State<HomePage> {
       // Il corpo cambia a seconda della tab selezionata
       body: _pages[_selectedIndex],
       
+      // Pulsante Floating Action Button per Aggiungi
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _navigateToAddForm(),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        child: const Icon(Icons.add_rounded, color: Colors.white),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+
       // Implementazione della BottomNavigationBar per la TabBar
-      bottomNavigationBar: BottomNavigationBar(
-        items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(
-            icon: Icon(Icons.dashboard_rounded),
-            label: 'Dashboard',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.add_circle),
-            label: 'Aggiungi',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: 'Profilo',
-          ),
-        ],
-        currentIndex: _selectedIndex,
-        // Usiamo un colore neutro per la background, e i colori del tema per selezione
-        selectedItemColor: Theme.of(context).colorScheme.secondary,
-        unselectedItemColor: Colors.grey,
-        onTap: _onItemTapped,
+      bottomNavigationBar: BottomAppBar(
+        shape: const CircularNotchedRectangle(),
+        notchMargin: 6.0,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: <Widget>[
+            // Tab Dashboard
+            IconButton(
+              icon: Icon(Icons.dashboard_rounded, color: _selectedIndex == 0 ? Theme.of(context).colorScheme.secondary : Colors.grey),
+              onPressed: () => _onItemTapped(0),
+              tooltip: 'Dashboard',
+            ),
+            // Spazio per il FAB
+            const SizedBox(width: 48), 
+            // Tab Profilo
+            IconButton(
+              icon: Icon(Icons.person, color: _selectedIndex == 1 ? Theme.of(context).colorScheme.secondary : Colors.grey),
+              onPressed: () => _onItemTapped(1), // L'indice 1 corrisponde a ProfilePage nella lista _pages
+              tooltip: 'Profilo',
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -87,8 +109,6 @@ class _HomePageState extends State<HomePage> {
       case 0:
         return 'Secure Vault - Dashboard';
       case 1:
-        return 'Aggiungi Password';
-      case 2:
         return 'Profilo Utente';
       default:
         return 'Secure Vault';
