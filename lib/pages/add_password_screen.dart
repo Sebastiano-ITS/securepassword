@@ -1,290 +1,245 @@
-// lib/pages/add_password_screen.dart
+// lib/pages/add_password_form.dart
 
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../models/password_entry.dart';
 import '../services/secure_storage_service.dart';
 
-class AddPasswordScreen extends StatefulWidget {
-  // Callback da chiamare quando l'operazione è completata (per ricaricare la Dashboard)
-  final VoidCallback onPasswordUpdated; 
-  // Password esistente per la modalità modifica (opzionale)
-  final PasswordEntry? existingEntry; 
-
-  const AddPasswordScreen({
-    super.key,
-    required this.onPasswordUpdated,
-    this.existingEntry,
-  });
-
-  @override
-  State<AddPasswordScreen> createState() => _AddPasswordScreenState();
-}
-
-class _AddPasswordScreenState extends State<AddPasswordScreen> {
-  final SecureStorageService _storageService = SecureStorageService();
-  final _formKey = GlobalKey<FormState>();
-
-  // Controller
-  late final TextEditingController _titleController;
-  late final TextEditingController _usernameController;
-  late final TextEditingController _emailController;
-  late final TextEditingController _passwordController;
-
-  bool _isPasswordVisible = false;
+// Funzione per mostrare il dialogo di AGGIUNTA o MODIFICA password
+Future<void> showAddPasswordDialog(
+    BuildContext context, 
+    VoidCallback onPasswordUpdated, 
+    {PasswordEntry? existingEntry} // <--- PARAMETRO OPZIONALE per la modifica
+) async {
+  final SecureStorageService storageService = SecureStorageService();
   
-  // Variabili di stato per il feedback sulla password
-  double _strengthValue = 0.0;
-  Color _strengthColor = Colors.grey;
+  // Inizializza i controller con i dati esistenti se siamo in modalità modifica
+  final TextEditingController titleController = TextEditingController(text: existingEntry?.title);
+  final TextEditingController usernameController = TextEditingController(text: existingEntry?.username);
+  final TextEditingController emailController = TextEditingController(text: existingEntry?.email);
+  final TextEditingController passwordController = TextEditingController(text: existingEntry?.password);
 
-  // Inizializzazione dei controller e calcolo iniziale della forza
-  @override
-  void initState() {
-    super.initState();
-    final isEditing = widget.existingEntry != null;
-    
-    _titleController = TextEditingController(text: widget.existingEntry?.title ?? '');
-    _usernameController = TextEditingController(text: widget.existingEntry?.username ?? '');
-    _emailController = TextEditingController(text: widget.existingEntry?.email ?? '');
-    _passwordController = TextEditingController(text: widget.existingEntry?.password ?? '');
+  // Inizializza il colore del selettore con quello esistente o con un colore predefinito
+  Color selectedColor = existingEntry?.color ?? Colors.grey.shade400;
 
-    // Calcola la forza iniziale della password (in caso di modifica)
-    if (isEditing) {
-      _calculatePasswordStrength(widget.existingEntry!.password);
-    }
-    
-    // Ascolta i cambiamenti nel campo password per aggiornare il feedback
-    _passwordController.addListener(_onPasswordChanged);
-  }
+  final isEditing = existingEntry != null;
 
-  // Rimuovi l'ascoltatore quando il widget viene eliminato
-  @override
-  void dispose() {
-    _passwordController.removeListener(_onPasswordChanged);
-    _titleController.dispose();
-    _usernameController.dispose();
-    _emailController.dispose();
-    _passwordController.dispose();
-    super.dispose();
-  }
-
-  // LOGICA: Aggiorna lo stato della forza della password
-  void _onPasswordChanged() {
-    _calculatePasswordStrength(_passwordController.text);
-  }
-
-  // LOGICA: Calcola e imposta i valori di forza e colore
-  void _calculatePasswordStrength(String password) {
-    if (password.isEmpty) {
-      setState(() {
-        _strengthValue = 0.0;
-        _strengthColor = Theme.of(context).dividerColor;
-      });
-      return;
-    }
-    
-    final strength = PasswordEntry.getStrength(password);
-    final strengthLevel = PasswordEntry(
-      id: '', title: '', username: '', email: '', password: password
-    ).strengthLevel;
-    
-    setState(() {
-      _strengthValue = strength;
-      _strengthColor = PasswordEntry(
-        id: '', title: '', username: '', email: '', password: password
-      ).strengthColor(Theme.of(context));
-    });
-  }
+  // Stato per la barra di forza all'interno del dialogo
+  // Non essendo uno StatefulWidget, usiamo uno StateSetter per aggiornare l'UI locale
+  double strengthValue = PasswordEntry.getStrength(passwordController.text);
   
-  // LOGICA: Gestione del salvataggio/aggiornamento
-  Future<void> _handleSave() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-    
-    final title = _titleController.text.trim();
-    final username = _usernameController.text.trim();
-    final email = _emailController.text.trim();
-    final password = _passwordController.text;
-    
-    // Controlli di validazione aggiuntivi (almeno username o email)
-    if (title.isEmpty || password.isEmpty || (username.isEmpty && email.isEmpty)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Compila Titolo, Password, e almeno Username o Email.')),
-      );
-      return;
-    }
-
-    final isEditing = widget.existingEntry != null;
-    final id = isEditing ? widget.existingEntry!.id : const Uuid().v4();
-
-    final newEntry = PasswordEntry(
-      id: id,
-      title: title,
-      username: username,
-      email: email,
-      password: password,
-    );
-
-    if (isEditing) {
-      await _storageService.updatePassword(newEntry);
-    } else {
-      await _storageService.addPassword(newEntry);
-    }
-
-    // Successo: Chiama il callback e torna indietro
-    widget.onPasswordUpdated();
-    if (mounted) {
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Password ${isEditing ? 'aggiornata' : 'salvata'} con successo!')),
-      );
-    }
+  // Lista di colori suggeriti per la personalizzazione
+  final List<Color> suggestedColors = [
+    Colors.grey.shade400,
+    Colors.red,
+    Colors.orange,
+    Colors.amber,
+    Colors.lightGreen,
+    Colors.blue,
+    Colors.indigo,
+    Colors.purple,
+    Colors.pink,
+  ];
+  
+  // Aggiunge un listener per aggiornare la forza in tempo reale
+  void updateStrength() {
+    strengthValue = PasswordEntry.getStrength(passwordController.text);
   }
 
-  // Costruisce il campo di input per la password
-  Widget _buildPasswordInput(ThemeData theme) {
-    final percentage = (_strengthValue * 100).round();
-    
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextFormField(
-          controller: _passwordController,
-          obscureText: !_isPasswordVisible,
-          decoration: InputDecoration(
-            labelText: 'Password',
-            border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(10))),
-            prefixIcon: const Icon(Icons.lock_rounded),
-            suffixIcon: IconButton(
-              icon: Icon(_isPasswordVisible ? Icons.visibility_off : Icons.visibility),
-              onPressed: () {
-                setState(() {
-                  _isPasswordVisible = !_isPasswordVisible;
-                });
-              },
-            ),
-          ),
-          validator: (value) {
-            if (value == null || value.isEmpty) {
-              return 'La password non può essere vuota';
-            }
-            return null;
+  passwordController.addListener(updateStrength);
+
+
+  return showDialog<void>(
+    context: context,
+    builder: (BuildContext dialogContext) {
+      return AlertDialog(
+        title: Text(isEditing ? 'Modifica Password' : 'Aggiungi Nuova Password'),
+        content: StatefulBuilder( // StatefulBuilder per aggiornare la UI all'interno del dialogo
+          builder: (BuildContext context, StateSetter setState) {
+            
+            // Per il colore della strength bar
+            final strengthColor = PasswordEntry(
+              id: '', // Placeholder, non usato per il colore
+              title: '', username: '', email: '', password: passwordController.text,
+              colorHex: '#CCCCCC',
+            ).strengthColor(Theme.of(context));
+
+            return SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  TextField(
+                    controller: titleController,
+                    decoration: const InputDecoration(labelText: 'Titolo (es. Google, Banca)'),
+                  ),
+                  TextField(
+                    controller: usernameController,
+                    decoration: const InputDecoration(labelText: 'Username'),
+                  ),
+                  TextField(
+                    controller: emailController,
+                    decoration: const InputDecoration(labelText: 'Email'),
+                    keyboardType: TextInputType.emailAddress,
+                  ),
+                  TextField(
+                    controller: passwordController,
+                    decoration: InputDecoration(
+                      labelText: 'Password',
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.vpn_key_rounded),
+                        onPressed: () {
+                          // TODO: Implementare la generazione di password
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Funzione di generazione password in arrivo!')),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 10),
+                  
+                  // INDICATORE DI FORZA
+                  LinearProgressIndicator(
+                    value: strengthValue,
+                    backgroundColor: Theme.of(context).dividerColor.withOpacity(0.5),
+                    valueColor: AlwaysStoppedAnimation<Color>(strengthColor),
+                  ),
+                  
+                  const SizedBox(height: 10),
+                  Text(
+                    'Forza: ${PasswordEntry.getStrength(passwordController.text).toStringAsFixed(2)}',
+                    style: TextStyle(color: strengthColor, fontWeight: FontWeight.bold),
+                  ),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // SELETTORE COLORE
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('Colore Card:', style: Theme.of(context).textTheme.titleSmall),
+                  ),
+                  Wrap(
+                    spacing: 8.0,
+                    children: suggestedColors.map((color) {
+                      return GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            selectedColor = color;
+                          });
+                        },
+                        child: Container(
+                          width: 30,
+                          height: 30,
+                          margin: const EdgeInsets.only(top: 8.0),
+                          decoration: BoxDecoration(
+                            color: color,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: selectedColor == color ? Theme.of(context).colorScheme.primary : Colors.transparent,
+                              width: 3,
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            );
           },
         ),
-        
-        const SizedBox(height: 10),
-        
-        // Indicatore Forza Password
-        Row(
-          children: [
-            SizedBox(
-              width: 50,
-              child: Text(
-                '$percentage%',
-                style: TextStyle(
-                  color: _strengthColor,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: LinearProgressIndicator(
-                value: _strengthValue,
-                backgroundColor: _strengthColor.withOpacity(0.2), 
-                valueColor: AlwaysStoppedAnimation<Color>(_strengthColor),
-                minHeight: 8.0,
-                borderRadius: BorderRadius.circular(5),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
+        actions: <Widget>[
+          TextButton(
+            child: const Text('Annulla'),
+            onPressed: () {
+              passwordController.removeListener(updateStrength);
+              Navigator.of(dialogContext).pop();
+            },
+          ),
+          ElevatedButton(
+            child: Text(isEditing ? 'SALVA MODIFICHE' : 'SALVA'),
+            onPressed: () async {
+              passwordController.removeListener(updateStrength);
+              
+              final title = titleController.text.trim();
+              final password = passwordController.text;
+              final username = usernameController.text.trim();
+              final email = emailController.text.trim();
+              
+              // Conversione del colore in formato esadecimale per il salvataggio
+              final colorHex = '#${selectedColor.value.toRadixString(16).substring(2).toUpperCase()}';
+
+              // Validazione minima
+              if (title.isNotEmpty && password.isNotEmpty && (username.isNotEmpty || email.isNotEmpty)) {
+                
+                final newEntry = PasswordEntry(
+                  // Manteniamo l'ID esistente se in modalità modifica, altrimenti ne creiamo uno nuovo
+                  id: existingEntry?.id ?? const Uuid().v4(), 
+                  title: title,
+                  username: username,
+                  email: email,
+                  password: password,
+                  colorHex: colorHex,
+                );
+                
+                if (isEditing) {
+                  // CHIAMATA CORRETTA PER LA MODIFICA
+                  await storageService.updatePassword(newEntry);
+                } else {
+                  await storageService.addPassword(newEntry);
+                }
+                
+                // Chiama il callback per aggiornare la Dashboard
+                onPasswordUpdated(); 
+                
+                if (dialogContext.mounted) {
+                  Navigator.of(dialogContext).pop();
+                }
+                
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Password ${isEditing ? 'aggiornata' : 'salvata'} con successo!') ),
+                );
+              } else {
+                 ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Compila Titolo, Password, e almeno Username o Email.')),
+                );
+              }
+            },
+          ),
+        ],
+      );
+    },
+  );
+}
+
+// Scheda Placeholder per la Tab "Aggiungi"
+class AddPasswordPage extends StatelessWidget {
+  const AddPasswordPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final isEditing = widget.existingEntry != null;
-    final theme = Theme.of(context);
-    
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(isEditing ? 'Modifica Password' : 'Aggiungi Nuova Password'),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              // Campo Titolo
-              TextFormField(
-                controller: _titleController,
-                decoration: const InputDecoration(
-                  labelText: 'Titolo (es. Google, Banca)',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(10))),
-                  prefixIcon: Icon(Icons.label_important_rounded),
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Il titolo è obbligatorio.';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 20),
-
-              // Campo Username
-              TextFormField(
-                controller: _usernameController,
-                decoration: const InputDecoration(
-                  labelText: 'Username',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(10))),
-                  prefixIcon: Icon(Icons.person_rounded),
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // Campo Email
-              TextFormField(
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(10))),
-                  prefixIcon: Icon(Icons.alternate_email_rounded),
-                ),
-              ),
-              
-              const SizedBox(height: 30),
-
-              // Campo Password e Feedback Forza
-              _buildPasswordInput(theme),
-              
-              const SizedBox(height: 40),
-
-              // Pulsante Salva
-              ElevatedButton.icon(
-                icon: Icon(isEditing ? Icons.save_rounded : Icons.add_circle_outline_rounded),
-                label: Text(
-                  isEditing ? 'Salva Modifiche' : 'Aggiungi Password',
-                  style: const TextStyle(fontSize: 18),
-                ),
-                onPressed: _handleSave,
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 15),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  backgroundColor: theme.colorScheme.secondary,
-                  foregroundColor: theme.colorScheme.onSecondary,
-                  elevation: 5,
-                ),
-              ),
-            ],
+    // Quando si seleziona questa tab, il form verrà mostrato in HomePage,
+    // quindi questa pagina serve solo come feedback visivo.
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.add_circle,
+            size: 80,
+            color: Theme.of(context).colorScheme.secondary,
           ),
-        ),
+          const SizedBox(height: 20),
+          const Padding(
+            padding: EdgeInsets.all(32.0),
+            child: Text(
+              'La scheda "Aggiungi" apre la finestra per creare una nuova password.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 16),
+            ),
+          ),
+        ],
       ),
     );
   }

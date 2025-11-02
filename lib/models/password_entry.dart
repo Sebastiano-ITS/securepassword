@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart'; // Importato per usare Color
-import 'package:password_strength/password_strength.dart'; // <--- Importa la libreria
+import 'package:flutter/material.dart';
+import 'package:password_strength/password_strength.dart';
 
 // Enum per definire i livelli di forza della password
 enum PasswordStrengthLevel {
@@ -17,6 +17,7 @@ class PasswordEntry {
   final String username;
   final String email;
   final String password;
+  final String colorHex; // Codice colore esadecimale (es. #FF0000)
 
   PasswordEntry({
     required this.id,
@@ -24,22 +25,31 @@ class PasswordEntry {
     required this.username,
     required this.email,
     required this.password,
+    this.colorHex = '#CCCCCC', // Valore di default grigio chiaro
   });
-
-  // ----------------------------------------------------
-  // --- LOGICA FORZA PASSWORD (Aggiunta per PasswordCard) ---
-  // ----------------------------------------------------
-
-  // 1. Metodo statico per calcolare il livello di forza (0.0 a 1.0)
-  static double getStrength(String password) {
-    if (password.isEmpty) return 0.0;
-    // Utilizza la funzione get di 'password_strength'
-    return estimatePasswordStrength(password); 
+  
+  // Metodo per convertire colorHex in un oggetto Color di Flutter
+  Color get color {
+    final hexString = colorHex.replaceFirst('#', '');
+    if (hexString.length == 6) {
+      return Color(int.parse('FF$hexString', radix: 16));
+    }
+    // Ritorna il colore di default se il formato è sbagliato
+    return Colors.grey.shade400; 
   }
 
-  // 2. Getter per ottenere l'oggetto PasswordStrengthLevel
+  // Metodo statico per calcolare il valore di forza (0.0 a 1.0)
+  static double getStrength(String password) {
+    if (password.isEmpty) return 0.0;
+    return estimatePasswordStrength(password); 
+  }
+  
+  // NUOVO GETTER: Restituisce il valore di forza (double) per la progress bar
+  double get strengthValue => getStrength(password);
+
+  // Metodo per ottenere l'oggetto PasswordStrengthLevel
   PasswordStrengthLevel get strengthLevel {
-    final double strength = getStrength(password);
+    final double strength = strengthValue; // Usa il nuovo getter
 
     if (password.isEmpty) {
       return PasswordStrengthLevel.blank;
@@ -54,13 +64,7 @@ class PasswordEntry {
     }
   }
   
-  // 3. Getter che restituisce il valore (0.0 a 1.0) per LinearProgressIndicator
-  double get strengthValue {
-    if (password.isEmpty) return 0.0;
-    return getStrength(password);
-  }
-
-  // 4. Metodo che restituisce il Colore in base al livello di forza
+  // Metodo per ottenere il colore associato al livello di forza
   Color strengthColor(ThemeData theme) {
     switch (strengthLevel) {
       case PasswordStrengthLevel.weak:
@@ -68,21 +72,16 @@ class PasswordEntry {
       case PasswordStrengthLevel.medium:
         return Colors.orange;
       case PasswordStrengthLevel.strong:
-        return Colors.blue;
+        return Colors.lightGreen;
       case PasswordStrengthLevel.veryStrong:
-        return Colors.green;
+        return theme.colorScheme.primary; // Colore del tema
       case PasswordStrengthLevel.blank:
       default:
         return theme.dividerColor;
     }
   }
 
-
-  // ----------------------------------------------------
-  // --- SERIALIZZAZIONE (Invariata) ---
-  // ----------------------------------------------------
-  
-  // 5. METODO toMap() (Serializzazione)
+  // 4. METODO toMap() (Serializzazione)
   Map<String, String> toMap() {
     return {
       'id': id,
@@ -90,10 +89,11 @@ class PasswordEntry {
       'username': username,
       'email': email,
       'password': password,
+      'colorHex': colorHex, // <--- Aggiornato
     };
   }
 
-  // 6. METODO fromMap() (Deserializzazione)
+  // 5. METODO fromMap() (Deserializzazione)
   static PasswordEntry fromMap(Map<String, String> map) {
     return PasswordEntry(
       id: map['id'] ?? '',
@@ -101,6 +101,7 @@ class PasswordEntry {
       username: map['username'] ?? '',
       email: map['email'] ?? '',
       password: map['password'] ?? '',
+      colorHex: map['colorHex'] ?? '#CCCCCC', // <--- Aggiornato
     );
   }
 }

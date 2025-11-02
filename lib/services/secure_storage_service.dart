@@ -1,5 +1,3 @@
-// lib/services/secure_storage_service.dart
-
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/password_entry.dart';
@@ -10,6 +8,8 @@ class SecureStorageService {
   // Chiavi per l'account Master dell'App
   static const String _masterKey = 'master_password';
   static const String _usernameKey = 'master_username';
+  // NUOVA CHIAVE PER L'EMAIL
+  static const String _masterEmailKey = 'master_email'; 
   static const String _sessionKey = 'is_logged_in'; 
   
   // Chiave per le password salvate nel vault
@@ -19,14 +19,22 @@ class SecureStorageService {
   // --- Gestione Master Account e Sessione ---
   // ------------------------------------
 
+  // Metodo per creare (registrare) l'account Master
+  Future<void> createMasterAccount(String username, String password) async {
+    // Quando crei l'account, salviamo solo username e password (l'email viene ignorata qui per semplicità)
+    await _storage.write(key: _usernameKey, value: username);
+    await _storage.write(key: _masterKey, value: password);
+    await _setSession(true); // Logga l'utente automaticamente
+  }
+
   // Metodo per recuperare l'username salvato
   Future<String?> getMasterUsername() async {
     return await _storage.read(key: _usernameKey);
   }
 
-  // Metodo per recuperare l'email master (usiamo la stessa chiave dell'username per ora)
+  // NUOVO: Metodo per recuperare l'email salvata
   Future<String?> getMasterEmail() async {
-    return await _storage.read(key: _usernameKey);
+    return await _storage.read(key: _masterEmailKey);
   }
 
   // Controlla se le credenziali master sono già state salvate (Account creato)
@@ -40,21 +48,12 @@ class SecureStorageService {
   }
 
   // Controlla se l'utente è già loggato
-  // Questo corrisponde all'errore: 'checkSession' -> is_logged_in
   Future<bool> isLoggedIn() async {
-    final status = await _storage.read(key: _sessionKey);
-    return status == 'true';
+    final sessionValue = await _storage.read(key: _sessionKey);
+    return sessionValue == 'true';
   }
 
-  // Registra un nuovo account Master
-  // Questo corrisponde all'errore: 'createMasterAccount' -> registerMasterAccount
-  Future<void> registerMasterAccount(String username, String password) async {
-    await _storage.write(key: _usernameKey, value: username);
-    await _storage.write(key: _masterKey, value: password);
-    await _setSession(true);
-  }
-
-  // Autentica l'utente Master
+  // Logica di Login: verifica le credenziali e imposta la sessione
   Future<bool> login(String username, String password) async {
     final storedUsername = await _storage.read(key: _usernameKey);
     final storedPassword = await _storage.read(key: _masterKey);
@@ -71,10 +70,9 @@ class SecureStorageService {
   }
 
   // ------------------------------------
-  // --- Gestione Password Vault ---
+  // --- Gestione Password Vault (Invariato) ---
   // ------------------------------------
 
-  // Carica tutte le password
   Future<List<PasswordEntry>> loadPasswords() async {
     final jsonString = await _storage.read(key: _passwordsListKey);
     if (jsonString == null) {
@@ -86,7 +84,6 @@ class SecureStorageService {
         .toList();
   }
 
-  // Salva l'intera lista di password (privato)
   Future<void> _savePasswords(List<PasswordEntry> passwords) async {
     final jsonString = jsonEncode(passwords.map((p) => p.toMap()).toList());
     await _storage.write(key: _passwordsListKey, value: jsonString);
@@ -99,27 +96,27 @@ class SecureStorageService {
     await _savePasswords(passwords); 
   }
 
-  // AGGIORNA PASSWORD ESISTENTE
-  Future<void> updatePassword(PasswordEntry entry) async {
-    final passwords = await loadPasswords();
-    
-    // Trova l'indice della vecchia entry (usando l'ID)
-    final index = passwords.indexWhere((p) => p.id == entry.id);
-    
-    if (index != -1) {
-      // Sostituisce la vecchia entry con la nuova entry aggiornata
-      passwords[index] = entry; 
-      await _savePasswords(passwords); 
-    }
-  }
-
   // ELIMINA PASSWORD
   Future<void> deletePassword(String id) async {
     final passwords = await loadPasswords();
-    
-    // Rimuove la password con l'ID specificato
     passwords.removeWhere((p) => p.id == id);
-    
     await _savePasswords(passwords);
   }
+
+  // MODIFICA PASSWORD
+  Future<void> updatePassword(PasswordEntry updatedEntry) async {
+    final passwords = await loadPasswords();
+    final index = passwords.indexWhere((p) => p.id == updatedEntry.id);
+
+    if (index != -1) {
+      passwords[index] = updatedEntry;
+      await _savePasswords(passwords);
+    }
+  }
+
+  // NUOVO: Metodo per aggiornare solo l'email del Master Account
+  Future<void> updateMasterEmail(String newEmail) async {
+    await _storage.write(key: _masterEmailKey, value: newEmail);
+  }
+
 }

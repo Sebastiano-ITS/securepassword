@@ -31,31 +31,23 @@ class _AuthPageState extends State<AuthPage> {
     final accountExists = await _storageService.isAccountCreated();
     
     // 2. Controlla se l'utente è già loggato
-    // Correzione: uso isLoggedIn() invece di checkSession()
     final sessionActive = await _storageService.isLoggedIn();
 
     if (sessionActive && mounted) {
-      // Se la sessione è attiva, naviga direttamente alla HomePage
-      _navigateToHome();
-      return; 
-    }
-
-    setState(() {
-      _isLoginMode = accountExists; // Se esiste, la modalità predefinita è Login
-      _isLoading = false;
-    });
-  }
-  
-  void _navigateToHome() {
-     Navigator.of(context).pushAndRemoveUntil(
+      // Se la sessione è attiva, vai direttamente alla Home Page
+      Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const HomePage()),
-        (Route<dynamic> route) => false,
       );
+    } else {
+      // Altrimenti, imposta la modalità iniziale e nascondi il loading
+      setState(() {
+        _isLoginMode = accountExists; // Se esiste, la modalità predefinita è Login
+        _isLoading = false;
+      });
+    }
   }
 
   void _handleAuth() async {
-    if (!mounted) return;
-
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -64,56 +56,64 @@ class _AuthPageState extends State<AuthPage> {
     final username = _usernameController.text.trim();
     final password = _passwordController.text;
 
-    if (username.isEmpty || password.isEmpty || password.length < 6) {
+    if (username.isEmpty || password.isEmpty) {
       setState(() {
-        _errorMessage = 'Username e password (min. 6 caratteri) sono obbligatori.';
+        _errorMessage = 'Compila tutti i campi.';
         _isLoading = false;
       });
       return;
     }
-    
+
     bool success = false;
     String successMessage = '';
 
     try {
       if (_isLoginMode) {
-        // Modalità Login: usa il metodo 'login'
+        // Modalità Login
         success = await _storageService.login(username, password);
-        successMessage = 'Accesso effettuato con successo!';
+        if (!success) {
+          _errorMessage = 'Username o Password errati.';
+        } else {
+          successMessage = 'Accesso effettuato con successo!';
+        }
       } else {
-        // Modalità Registrazione: usa il metodo 'registerMasterAccount'
-        // Correzione: uso registerMasterAccount() invece di createMasterAccount()
-        await _storageService.registerMasterAccount(username, password);
+        // Modalità Registrazione (Sign Up)
+        // CORREZIONE: Cambia 'registerMasterAccount' con 'createMasterAccount'
+        await _storageService.createMasterAccount(username, password); 
         success = true;
         successMessage = 'Account Master creato con successo!';
       }
     } catch (e) {
-      success = false;
-      _errorMessage = 'Errore di autenticazione: ${e.toString()}';
+      _errorMessage = 'Errore di autenticazione: $e';
     }
 
-    if (!mounted) return;
-
-    if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(successMessage)),
-      );
-      _navigateToHome();
-    } else {
+    if (mounted) {
       setState(() {
         _isLoading = false;
-        // Mostra un messaggio di errore più specifico per il login fallito
-        if (_isLoginMode && _errorMessage == null) {
-          _errorMessage = 'Credenziali non valide. Riprova.';
-        }
       });
+      
+      if (success) {
+        // Mostra un messaggio di successo
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(successMessage)),
+        );
+        // Naviga alla Home Page
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const HomePage()),
+        );
+      } else if (_errorMessage != null) {
+        // Mostra il messaggio di errore
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_errorMessage!)),
+        );
+      }
     }
   }
-
+  
   void _toggleMode() {
     setState(() {
       _isLoginMode = !_isLoginMode;
-      _errorMessage = null;
+      _errorMessage = null; // Resetta gli errori
       _usernameController.clear();
       _passwordController.clear();
     });
@@ -121,15 +121,20 @@ class _AuthPageState extends State<AuthPage> {
 
   @override
   Widget build(BuildContext context) {
-    final buttonText = _isLoginMode ? 'ACCEDI' : 'REGISTRATI';
-    final toggleText = _isLoginMode
-        ? 'Non hai un account? Registrati ora'
-        : 'Hai già un account? Accedi';
-
     final theme = Theme.of(context);
+    
+    final buttonText = _isLoginMode ? 'ACCEDI AL VAULT' : 'REGISTRATI';
+    final toggleText = _isLoginMode ? 'Non hai un account? Registrati' : 'Hai già un account? Accedi';
+    final headerText = _isLoginMode ? 'Bentornato!' : 'Crea il tuo Account Master';
+    final subHeaderText = _isLoginMode 
+        ? 'Inserisci le credenziali per sbloccare il tuo Secure Vault.'
+        : 'Questo account proteggerà tutte le tue password. Scegli una password forte!';
 
     return Scaffold(
-      backgroundColor: theme.colorScheme.background,
+      appBar: AppBar(
+        title: const Text('Secure Vault'),
+        centerTitle: true,
+      ),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(32.0),
@@ -137,35 +142,34 @@ class _AuthPageState extends State<AuthPage> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              // Logo/Titolo
               Icon(
-                Icons.lock_open_rounded, 
-                size: 100, 
+                _isLoginMode ? Icons.lock_open_rounded : Icons.person_add_alt_1_rounded,
+                size: 80,
                 color: theme.colorScheme.primary,
               ),
               const SizedBox(height: 20),
+              
               Text(
-                _isLoginMode ? 'Bentornato nel tuo Vault' : 'Crea il tuo Vault Master',
+                headerText,
                 textAlign: TextAlign.center,
-                style: theme.textTheme.headlineSmall!.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.onBackground,
-                ),
+                style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 8),
+              Text(
+                subHeaderText,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 30),
 
-              // Campo Username/Identificativo
+              // Campo Username
               TextField(
                 controller: _usernameController,
                 decoration: InputDecoration(
-                  labelText: 'Username o Email Master',
-                  prefixIcon: const Icon(Icons.person),
+                  labelText: 'Username Master',
+                  prefixIcon: Icon(Icons.person_rounded, color: theme.colorScheme.primary),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  filled: true,
-                  fillColor: theme.colorScheme.surface,
                 ),
-                keyboardType: TextInputType.emailAddress,
-                style: theme.textTheme.bodyLarge,
               ),
               const SizedBox(height: 20),
 
@@ -174,11 +178,12 @@ class _AuthPageState extends State<AuthPage> {
                 controller: _passwordController,
                 obscureText: !_isPasswordVisible,
                 decoration: InputDecoration(
-                  labelText: 'Password Master',
-                  prefixIcon: const Icon(Icons.vpn_key),
+                  labelText: 'Master Password',
+                  prefixIcon: Icon(Icons.lock_rounded, color: theme.colorScheme.primary),
                   suffixIcon: IconButton(
                     icon: Icon(
                       _isPasswordVisible ? Icons.visibility_off : Icons.visibility,
+                      color: Colors.grey,
                     ),
                     onPressed: () {
                       setState(() {
@@ -187,12 +192,9 @@ class _AuthPageState extends State<AuthPage> {
                     },
                   ),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  filled: true,
-                  fillColor: theme.colorScheme.surface,
                 ),
-                style: theme.textTheme.bodyLarge,
               ),
-
+              
               if (_errorMessage != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 15.0),

@@ -2,9 +2,11 @@
 
 import 'package:flutter/material.dart';
 import 'dashboard_page.dart';
-import 'add_password_screen.dart'; // Importa la nuova pagina
 import 'profile_page.dart';
 import '../models/password_entry.dart'; // Necessario per il passaggio del tipo
+// CORREZIONE 1: L'importazione corretta della funzione showAddPasswordDialog
+// La funzione è definita in 'add_password_form.dart' e non in 'add_password_screen.dart'
+import 'add_password_screen.dart'; 
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -21,7 +23,6 @@ class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
 
   // Lista di widget per le tab
-  // NB: La tab 1 è un placeholder perché vogliamo un FAB
   late final List<Widget> _pages = [
     DashboardPage(key: _dashboardKey), // 0) Dashboard
     // Non c'è più una pagina dedicata al form qui.
@@ -30,9 +31,10 @@ class _HomePageState extends State<HomePage> {
 
   // Modifichiamo l'indice per riflettere solo Dashboard (0) e Profilo (1)
   void _onItemTapped(int index) {
-    if (index == 2) { // Se clicca sul terzo elemento (che sarà il profilo)
+    // Gestisce il caso in cui il FAB (che prima era la tab 1, ora gestita esternamente) venga pressato
+    if (index == 2) { 
        setState(() {
-        _selectedIndex = 1; // 1 è l'indice di ProfilePage nella lista _pages
+        _selectedIndex = 1; // 1 è l'indice di ProfilePage
       });
     } else {
       setState(() {
@@ -41,25 +43,32 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // Funzione che naviga alla nuova schermata per l'aggiunta
-  void _navigateToAddForm({PasswordEntry? entry}) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => AddPasswordScreen(
-          existingEntry: entry,
-          // Quando il form salva, ricarica le password sulla Dashboard
-          onPasswordUpdated: () {
-            _dashboardKey.currentState?.loadPasswords();
-            // Torna alla Dashboard dopo il salvataggio
-            setState(() { _selectedIndex = 0; }); 
-          },
-        ),
-      ),
+  // Funzione che apre il dialogo per aggiungere la password
+  void _showAddForm() {
+    // CORREZIONE 2: Chiama la funzione showAddPasswordDialog direttamente.
+    // Non è un metodo di _HomePageState, ma una funzione esterna che abbiamo importato.
+    // Usiamo il key della Dashboard per chiamare la funzione di ricarica dei dati.
+    showAddPasswordDialog(
+      context,
+      () => _dashboardKey.currentState?.loadPasswords(),
     );
+  }
+
+  String _getTitle(int index) {
+    switch (index) {
+      case 0:
+        return 'Secure Vault - Dashboard';
+      case 1:
+        return 'Profilo Master';
+      default:
+        return 'Secure Vault';
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
       appBar: AppBar(
         title: Text(_getTitle(_selectedIndex)),
@@ -69,24 +78,25 @@ class _HomePageState extends State<HomePage> {
       // Il corpo cambia a seconda della tab selezionata
       body: _pages[_selectedIndex],
       
-      // Pulsante Floating Action Button per Aggiungi
+      // Floating Action Button al centro (sostituisce la vecchia tab "Aggiungi")
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _navigateToAddForm(),
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        onPressed: _showAddForm, // Chiama la funzione corretta
+        backgroundColor: theme.colorScheme.primary,
         child: const Icon(Icons.add_rounded, color: Colors.white),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
 
-      // Implementazione della BottomNavigationBar per la TabBar
+      // Implementazione della BottomNavigationBar usando BottomAppBar
       bottomNavigationBar: BottomAppBar(
         shape: const CircularNotchedRectangle(),
         notchMargin: 6.0,
+        color: theme.colorScheme.surface, // Assicurati che abbia un colore
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: <Widget>[
             // Tab Dashboard
             IconButton(
-              icon: Icon(Icons.dashboard_rounded, color: _selectedIndex == 0 ? Theme.of(context).colorScheme.secondary : Colors.grey),
+              icon: Icon(Icons.dashboard_rounded, color: _selectedIndex == 0 ? theme.colorScheme.secondary : Colors.grey),
               onPressed: () => _onItemTapped(0),
               tooltip: 'Dashboard',
             ),
@@ -94,24 +104,14 @@ class _HomePageState extends State<HomePage> {
             const SizedBox(width: 48), 
             // Tab Profilo
             IconButton(
-              icon: Icon(Icons.person, color: _selectedIndex == 1 ? Theme.of(context).colorScheme.secondary : Colors.grey),
-              onPressed: () => _onItemTapped(1), // L'indice 1 corrisponde a ProfilePage nella lista _pages
+              // Corretto: L'indice 1 corrisponde a ProfilePage nella lista _pages
+              icon: Icon(Icons.person, color: _selectedIndex == 1 ? theme.colorScheme.secondary : Colors.grey),
+              onPressed: () => _onItemTapped(1), 
               tooltip: 'Profilo',
             ),
           ],
         ),
       ),
     );
-  }
-  
-  String _getTitle(int index) {
-    switch (index) {
-      case 0:
-        return 'Secure Vault - Dashboard';
-      case 1:
-        return 'Profilo Utente';
-      default:
-        return 'Secure Vault';
-    }
   }
 }
