@@ -11,6 +11,7 @@ class SecureStorageService {
   // NUOVA CHIAVE PER L'EMAIL
   static const String _masterEmailKey = 'master_email'; 
   static const String _sessionKey = 'is_logged_in'; 
+  static const String _biometricEnabledKey = 'biometric_enabled';
   
   // Chiave per le password salvate nel vault
   static const String _passwordsListKey = 'password_list';
@@ -20,11 +21,11 @@ class SecureStorageService {
   // ------------------------------------
 
   // Metodo per creare (registrare) l'account Master
-  Future<void> createMasterAccount(String username, String password) async {
-    // Quando crei l'account, salviamo solo username e password (l'email viene ignorata qui per semplicità)
+  Future<void> createMasterAccount(String username, String password, String email) async {
     await _storage.write(key: _usernameKey, value: username);
     await _storage.write(key: _masterKey, value: password);
-    await _setSession(true); // Logga l'utente automaticamente
+    await _storage.write(key: _masterEmailKey, value: email);
+    await _setSession(true);
   }
 
   // Metodo per recuperare l'username salvato
@@ -53,6 +54,10 @@ class SecureStorageService {
     return sessionValue == 'true';
   }
 
+  Future<void> setLoggedIn(bool isLoggedIn) async {
+    await _setSession(isLoggedIn);
+  }
+
   // Logica di Login: verifica le credenziali e imposta la sessione
   Future<bool> login(String username, String password) async {
     final storedUsername = await _storage.read(key: _usernameKey);
@@ -67,6 +72,15 @@ class SecureStorageService {
 
   Future<void> logout() async {
     await _setSession(false); // Termina la sessione
+  }
+
+  Future<bool> isBiometricEnabled() async {
+    final value = await _storage.read(key: _biometricEnabledKey);
+    return value == 'true';
+  }
+
+  Future<void> setBiometricEnabled(bool enabled) async {
+    await _storage.write(key: _biometricEnabledKey, value: enabled.toString());
   }
 
   // ------------------------------------

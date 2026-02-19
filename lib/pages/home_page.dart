@@ -3,7 +3,6 @@
 import 'package:flutter/material.dart';
 import 'dashboard_page.dart';
 import 'profile_page.dart';
-import '../models/password_entry.dart'; // Necessario per il passaggio del tipo
 // CORREZIONE 1: L'importazione corretta della funzione showAddPasswordDialog
 // La funzione è definita in 'add_password_form.dart' e non in 'add_password_screen.dart'
 import 'add_password_screen.dart'; 

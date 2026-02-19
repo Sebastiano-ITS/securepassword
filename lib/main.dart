@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'pages/auth_page.dart';
+import 'pages/auth/login_page.dart';
 
 void main() {
   runApp(const PasswordManagerApp());
@@ -14,7 +14,7 @@ class PasswordManagerApp extends StatelessWidget {
       title: 'Password Manager Sicuro',
       debugShowCheckedModeBanner: false,
       theme: _buildModernTheme(),
-      home: const AuthPage(),
+      home: const LoginPage(),
     );
   }
 
